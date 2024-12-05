@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firbase";
+export const runtime = "edge";
 
 interface UseAuthReturn {
   user: User | null; 

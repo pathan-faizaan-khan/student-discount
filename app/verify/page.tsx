@@ -1,88 +1,171 @@
 "use client";
-import React, { useState } from "react";
-import dynamic from "next/dynamic";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import Webcam from "react-webcam";
+import jsQR from "jsqr";
+export const runtime = "edge";
 
-// Dynamically import QrReader to avoid SSR issues
-// const QrReader = dynamic(() => import("react-qr-reader"), { ssr: false });
-const QrReader = dynamic(() => import('react-qr-reader').then(mod => mod.QrReader), { ssr: false });
-
-
-export default function Home() {
-  const [qrCode, setQrCode] = useState(null);
+export default function Page() {
+  const [qrCode, setQrCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(true);
+  const router = useRouter();
+  const webcamRef = useRef<Webcam>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const handleScan = async (data:any) => {
+  const capture = useCallback(() => {
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (imageSrc && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      const image = new Image();
+      image.src = imageSrc;
+      image.onload = () => {
+        canvas.width = image.width;
+        canvas.height = image.height;
+        context?.drawImage(image, 0, 0, image.width, image.height);
+        const imageData = context?.getImageData(0, 0, image.width, image.height);
+        if (imageData) {
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code) {
+            handleScan(code.data);
+          }
+        }
+      };
+    }
+  }, [webcamRef, canvasRef]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isScanning) {
+        capture();
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [capture, isScanning]);
+
+  const handleScan = async (data: string) => {
     if (data) {
       setQrCode(data);
       setIsScanning(false);
-      setError("");
-
+      setError(null);
       try {
-        const response = await fetch("/api/verify-qr", {
+        const response = await fetch("https://student-discount.fk4460467.workers.dev/api/verify-qr", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ qrCode: data, userId: "123" }), // Replace with actual userId
+          body: JSON.stringify({ qrCode: data }),
         });
 
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+
         const result = await response.json();
+        console.log(result);
         if (result.verified) {
           setIsVerified(true);
         } else {
-          setError("QR Code not verified!");
+          setError("QR code not verified");
         }
       } catch (err) {
-        console.error("Error verifying QR code:", err);
-        setError("Verification failed. Try again!");
+        setError("Error verifying QR code");
+        console.error(err);
       }
     }
   };
 
-  const handleError = (err:any) => {
-    console.error("QR Reader Error:", err);
-    setError("Failed to access camera. Please allow permissions.");
-  };
-
-  const toggleScanner = () => {
-    setIsScanning(!isScanning);
+  const handleVerifyMore = () => {
+    setQrCode(null);
     setIsVerified(false);
-    setError("");
+    setError(null);
+    setIsScanning(true);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-blue-400 to-cyan-400 flex flex-col items-center justify-center p-6">
-      <h1 className="text-4xl font-bold text-white mb-6">QR Code Verifier</h1>
-      {!isVerified ? (
-        <>
-          {isScanning && (
-            <div className="w-80 h-80 bg-black rounded-xl overflow-hidden">
-              <QrReader
-                delay={300}
-                onError={handleError}
-                onScan={handleScan}
-                style={{ width: "100%" }}
-              />
-            </div>
-          )}
-          <button
-            onClick={toggleScanner}
-            className="mt-4 px-4 py-2 bg-white text-blue-500 font-semibold rounded-md shadow hover:shadow-lg"
-          >
-            {isScanning ? "Stop Scanner" : "Start Scanner"}
-          </button>
-          {error && <p className="text-red-500 mt-4">{error}</p>}
-        </>
-      ) : (
-        <div className="flex flex-col items-center">
-          <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-4 animate-ping-once">
-            <div className="w-12 h-6 border-4 border-white border-t-0 border-l-0 transform rotate-45"></div>
-          </div>
-          <p className="text-white text-2xl font-semibold">Verified Successfully!</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      {isScanning && (
+        <div className="relative border-blue-500">
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            videoConstraints={{ facingMode: { exact: "environment" } }}
+            className="w-full max-w-md rounded-lg shadow-lg"
+          />
+          <canvas ref={canvasRef} className="hidden" />
         </div>
       )}
+      {error && <p className="text-red-500 font-semibold mt-4">{error}</p>}
+      {isVerified && (
+        <div className="flex flex-col items-center">
+          <div className="tick-mark">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 52 52"
+              className="tick-mark-svg"
+            >
+              <circle
+                className="tick-mark-circle"
+                cx="26"
+                cy="26"
+                r="25"
+                fill="none"
+              />
+              <path
+                className="tick-mark-check"
+                fill="none"
+                d="M14.1 27.2l7.1 7.2 16.7-16.8"
+              />
+            </svg>
+          </div>
+          <button
+            onClick={handleVerifyMore}
+            className="mt-6 px-4 py-2 bg-blue-500 text-white font-bold rounded-sm hover:bg-green-600"
+          >
+            Verify More
+          </button>
+        </div>
+      )}
+      <style jsx>{`
+        .tick-mark {
+          width: 100px;
+          height: 100px;
+          margin: 0 auto;
+        }
+        .tick-mark-svg {
+          width: 100%;
+          height: 100%;
+        }
+        .tick-mark-circle {
+          stroke: #4caf50;
+          stroke-width: 2;
+          stroke-dasharray: 166;
+          stroke-dashoffset: 166;
+          stroke-linecap: round;
+          animation: dash 0.6s ease-in-out forwards;
+        }
+        .tick-mark-check {
+          stroke: #4caf50;
+          stroke-width: 2;
+          stroke-dasharray: 48;
+          stroke-dashoffset: 48;
+          stroke-linecap: round;
+          animation: dash-check 0.3s 0.6s ease-in-out forwards;
+        }
+        @keyframes dash {
+          to {
+            stroke-dashoffset: 0;
+          }
+        }
+        @keyframes dash-check {
+          to {
+            stroke-dashoffset: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }

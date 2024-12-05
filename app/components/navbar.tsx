@@ -1,4 +1,5 @@
 "use client";
+export const runtime = "edge";
 
 const LoginNavbar:React.FC= () => {
   return (
