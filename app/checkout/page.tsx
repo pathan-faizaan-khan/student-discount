@@ -14,6 +14,12 @@ interface Product {
 }
 
 const Page: React.FC = () => {
+  const products: Product[] = [
+    { text: "MacBook Pro", logo: "/macbook-pro.png" },
+    { text: "iPhone 13", logo: "/iphone-13.png" },
+    { text: "AirPods Pro", logo: "/airpods-pro.png" },
+    { text: "Apple Watch", logo: "/apple-watch.png" },
+  ]
   const [selected, setSelected] = useState<string>("Select the brand");
   const [counts, setCounts] = useState<{ [key: string]: number }>({});
   const [showQR, setShowQR] = useState<boolean>(false);
